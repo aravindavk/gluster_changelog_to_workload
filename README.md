@@ -74,6 +74,8 @@ For help,
 - [ ] Script will not detect the files which are existed before
   enabling Changelog.(We can build the cache by crawling. NOT
   IMPLEMENTED)
+- [ ] If Changelog is disabled and enabled, script only considers
+  latest HTIME file only for processing Changelogs.
 - [ ] More filters similar to `--not-modified-since`
 - [ ] Store Cache in common path so that script will be portable.
 - [ ] Integrate with [glustertool](https://github.com/gluster/glustertool)
