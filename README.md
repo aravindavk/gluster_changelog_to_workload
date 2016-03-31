@@ -99,3 +99,4 @@ For help,
 - [ ] Integrate with [glustertool](https://github.com/gluster/glustertool)
 - [ ] Stale data handling with cache. For example, if Volume is deleted
   and recreated with same brick path then Cache will have stale data.
+- [ ] Handling Unicode file names
