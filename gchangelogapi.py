@@ -23,10 +23,15 @@ SEP = "\x00"
 conn = None
 cursor = None
 ROOT_GFID = "00000000-0000-0000-0000-000000000001"
+LOG_FILE = "gchangelogapi.log"
 
 logger = logging.getLogger(__name__)
-handler = logging.StreamHandler(sys.stdout)
-handler.setFormatter(logging.Formatter('%(asctime)s %(message)s'))
+handler = logging.FileHandler(LOG_FILE)
+handler.setFormatter(logging.Formatter(
+    "[%(asctime)s] %(levelname)7s "
+    "[%(lineno)s:%(funcName)s] "
+    "- %(message)s"))
+
 logger.addHandler(handler)
 logger.setLevel(logging.INFO)
 
@@ -114,9 +119,13 @@ def db_rename_record(gfid, path1, path2, ts):
 
 
 def db_get_paths_not_modified_after(ts):
-    query = "SELECT path FROM data WHERE modified_at < ?"
-    cursor.execute(query, (ts, ))
-    return cursor.fetchall()
+    if ts == 0:
+        # Get all the file paths
+        query = "SELECT path FROM data"
+        cursor.execute(query)
+    else:
+        query = "SELECT path FROM data WHERE modified_at < ?"
+        cursor.execute(query, (ts, ))
 
 
 def db_update_last_processed(ts):
@@ -199,10 +208,12 @@ def get_args():
     parser = ArgumentParser(formatter_class=RawDescriptionHelpFormatter,
                             description=__doc__)
     parser.add_argument("brick_path", help="Brick Path")
-    parser.add_argument("output_file", help="Output File")
+    parser.add_argument("--output-file", "-o", help="Output File")
     parser.add_argument("--not-modified-since", "-n", type=int,
                         help="Files not modified since",
                         default=int(time.time()))
+    parser.add_argument("--mmin", type=int,
+                        help="File's data was last modified n minutes ago.")
     parser.add_argument("--no-cache", action="store_true",
                         help="Do not use cache")
     parser.add_argument("--output-prefix", help="Output prefix for path",
@@ -212,6 +223,25 @@ def get_args():
     parser.add_argument("--debug", help="Enable debug logging",
                         action="store_true")
     return parser.parse_args()
+
+
+def output(args, not_modified_since, file_obj=None):
+    db_get_paths_not_modified_after(not_modified_since)
+
+    for row in cursor:
+        path = row[0]
+        if args.pgfid_to_path:
+            pgfid, bn = row[0].split("/")
+            path = os.path.join(symlink_gfid_to_path(args.brick_path,
+                                                     pgfid), bn)
+
+        if args.output_prefix:
+            path = os.path.join(args.output_prefix, path)
+
+        if file_obj is not None:
+            file_obj.write("{0}\n".format(path))
+        else:
+            print (path)
 
 
 def main():
@@ -236,19 +266,21 @@ def main():
         sys.stderr.write("{0}\n".format(err))
         sys.exit(1)
 
+    not_modified_since = 0
+    if args.mmin is not None:
+        not_modified_since = int(time.time()) - (args.mmin * 60)
+    elif args.not_modified_since is not None:
+        not_modified_since = args.not_modified_since
+
+    logger.info("Not modified Since: {0}".format(not_modified_since))
+
     process_htime_file(args.brick_path, htime_file)
-    with open(args.output_file, "w") as f:
-        for row in db_get_paths_not_modified_after(args.not_modified_since):
-            path = row[0]
-            if args.pgfid_to_path:
-                pgfid, bn = row[0].split("/")
-                path = os.path.join(symlink_gfid_to_path(args.brick_path,
-                                                         pgfid), bn)
 
-            if args.output_prefix:
-                path = os.path.join(args.output_prefix, path)
-
-            f.write("{0}\n".format(path))
+    if args.output_file:
+        with open(args.output_file, "w") as f:
+            output(args, not_modified_since, f)
+    else:
+        output(args, not_modified_since)
 
 
 if __name__ == "__main__":

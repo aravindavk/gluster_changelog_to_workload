@@ -7,11 +7,20 @@ brick path it finds the HTIME directory and gets the latest HTIME
 file. HTIME file is a index file maintained by changelog translator,
 which will have changelog file names.
 
-    python gchangelogapi.py <BRICK_PATH> <OUTPUT_FILE>
+    python gchangelogapi.py <BRICK_PATH>
 
 For example,
 
-    python gchangelogapi.py /exports/brick1/b1 ~/output.txt
+    python gchangelogapi.py /exports/brick1/b1
+
+Creates log file(`gchangelogapi.log`) in the current directory.
+
+By default prints file names to stdout, which can be redirected to
+output file using `-o` or `--output-file`
+
+For example,
+
+    python gchangelogapi.py /exports/brick1/b1 -o output.txt
 
 Script uses
 [this](https://github.com/gluster/glustertool/blob/master/glustertool/plugins/changelogparser.py)
@@ -23,7 +32,7 @@ reprocessing Changelogs. Script uses sqlite table as cache when the
 script run second time. (Which can be overridden by specifying
 `--no-cache`)
 
-    python gchangelogapi.py /exports/brick1/b1 ~/output.txt --no-cache
+    python gchangelogapi.py /exports/brick1/b1 -o output.txt --no-cache
 
 Cache will be stored in current directory where we run the script, if
 we run the script in different directory then cache will not be
@@ -32,12 +41,21 @@ used.(This can be enhanced in future by saving in common path)
 By default script lists all the files in the Brick, to list only the
 files which are not modified after a given Timestamp,
 
-    python gchangelogapi.py /exports/brick1/b1 ~/output.txt \
+    python gchangelogapi.py /exports/brick1/b1 -o output.txt \
         --not-modified-since 1459423298
+
+Or similar to find command, can use `--mmin`
+
+    python gchangelogapi.py /exports/brick1/b1 -o output.txt \
+        --mmin 120
+
+Where,
+
+    --mmin MMIN File's data was last modified n minutes ago.
 
 Script can be run in debug mode by specifying `--debug`
 
-    python gchangelogapi.py /exports/brick1/b1 ~/output.txt \
+    python gchangelogapi.py /exports/brick1/b1 -o output.txt \
         --not-modified-since 1459423298 --debug
 
 Script by default will not convert PGFID into Path since it involves
@@ -50,7 +68,7 @@ Example output,
 
 Output can be prefixed by giving `--output-prefix`,
 
-    python gchangelogapi.py /exports/brick1/b1 ~/output.txt \
+    python gchangelogapi.py /exports/brick1/b1 -o output.txt \
         --not-modified-since 1459423298 --debug \
         --output-prefix=/mnt/gv1/.gfid
 
@@ -61,7 +79,7 @@ Example output,
 
 If we need to convert PGFID to path, specify `--pgfid-to-path`
 
-    python gchangelogapi.py /exports/brick1/b1 ~/output.txt \
+    python gchangelogapi.py /exports/brick1/b1 -o output.txt \
         --not-modified-since 1459423298 --debug --pgfid-to-path
     
 For help,
