@@ -81,7 +81,22 @@ If we need to convert PGFID to path, specify `--pgfid-to-path`
 
     python gchangelogapi.py /exports/brick1/b1 -o output.txt \
         --not-modified-since 1459423298 --debug --pgfid-to-path
-    
+
+## Usecase - Deleting Old files
+The script output can be piped to another command, which can be used
+to delete the older files. For example, delete all files which are not
+modified in last one hour.
+
+    python gchangelogapi.py /exports/brick1/b1 \
+        --output-prefix=/mnt/gv1/.gfid \
+        --mmin 120 | xargs rm
+
+Note: You can double confirm before deleting actual file,
+
+    python gchangelogapi.py /exports/brick1/b1 \
+        --output-prefix=/mnt/gv1/.gfid \
+        --mmin 60 | xargs -t -I {} find {} -mmin -60 | xargs rm
+
 For help,
 
     python gchangelogapi.py --help
