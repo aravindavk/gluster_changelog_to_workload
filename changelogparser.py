@@ -24,7 +24,7 @@ D c5250af6-720e-4bfe-b938-827614304f39
 
 """
 import sys
-
+import codecs
 
 ENTRY = 'E'
 META = 'M'
@@ -107,19 +107,19 @@ class Record(object):
 
     def __unicode__(self):
         if self.fop_type == "D":
-            return "{ts} {fop_type} {gfid}".format(**self.__dict__)
+            return u"{ts} {fop_type} {gfid}".format(**self.__dict__)
         elif self.fop_type == "M":
-            return "{ts} {fop_type} {gfid} {fop}".format(**self.__dict__)
+            return u"{ts} {fop_type} {gfid} {fop}".format(**self.__dict__)
         elif self.fop_type == "E":
             if self.fop in ["CREATE", "MKNOD", "MKDIR"]:
-                return ("{ts} {fop_type} {gfid} {fop} "
-                        "{path} {mode} {uid} {gid}".format(**self.__dict__))
+                return (u"{ts} {fop_type} {gfid} {fop} "
+                        u"{path} {mode} {uid} {gid}".format(**self.__dict__))
             elif self.fop == "RENAME":
-                return ("{ts} {fop_type} {gfid} {fop} "
-                        "{path1} {path2}".format(**self.__dict__))
+                return (u"{ts} {fop_type} {gfid} {fop} "
+                        u"{path1} {path2}".format(**self.__dict__))
             elif self.fop in ["LINK", "SYMLINK", "UNLINK", "RMDIR"]:
-                return ("{ts} {fop_type} {gfid} {fop} "
-                        "{path}".format(**self.__dict__))
+                return (u"{ts} {fop_type} {gfid} {fop} "
+                        u"{path}".format(**self.__dict__))
             else:
                 return repr(self.__dict__)
         else:
@@ -170,20 +170,20 @@ def process_record(data, tokens, changelog_ts, callback):
                           path1=data[tokens[3]],
                           path2=data[tokens[4]])
         if tokens[2] in ["LINK", "SYMLINK", "UNLINK", "RMDIR"]:
-            record.rename(fop=tokens[2],
-                          path=data[tokens[3]])
+            record.link_symlink_unlink_rmdir(fop=tokens[2],
+                                             path=data[tokens[3]])
     callback(record)
 
 
 def default_callback(record):
-    sys.stdout.write("{0}\n".format(record))
+    sys.stdout.write(u"{0}\n".format(record))
 
 
 def parse(filename, callback=default_callback):
     data = None
     tokens = []
     changelog_ts = filename.rsplit(".")[-1]
-    with open(filename, "r+b") as f:
+    with codecs.open(filename, mode="r+b", encoding="utf-8") as f:
         # GlusterFS Changelog | version: v1.1 | encoding : 2
         header = f.readline()
         version = header.split()[4]

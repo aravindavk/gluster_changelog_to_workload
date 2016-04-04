@@ -95,8 +95,9 @@ For help,
 - [ ] If Changelog is disabled and enabled, script only considers
   latest HTIME file only for processing Changelogs.
 - [ ] More filters similar to `--not-modified-since`
-- [ ] Store Cache in common path so that script will be portable.
+- [X] Store Cache in common path so that script will be
+  portable(Introduced `--cache-dir` option)
 - [ ] Integrate with [glustertool](https://github.com/gluster/glustertool)
 - [ ] Stale data handling with cache. For example, if Volume is deleted
   and recreated with same brick path then Cache will have stale data.
-- [ ] Handling Unicode file names
+- [X] Handling Unicode file names

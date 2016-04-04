@@ -220,6 +220,8 @@ def get_args():
                         default="")
     parser.add_argument("--pgfid-to-path", action="store_true",
                         help="Convert PGFID to Path")
+    parser.add_argument("--cache-dir", default="",
+                        help="Cache directory")
     parser.add_argument("--debug", help="Enable debug logging",
                         action="store_true")
     return parser.parse_args()
@@ -250,7 +252,9 @@ def main():
     if args.debug:
         logger.setLevel(logging.DEBUG)
 
-    db_path = "changelogdata_" + urllib.quote_plus(args.brick_path) + ".db"
+    db_path = os.path.join(args.cache_dir,
+                           "changelogdata_" + urllib.quote_plus(
+                               args.brick_path) + ".db")
     db_init(db_path)
 
     # Delete Db if no cache is set
