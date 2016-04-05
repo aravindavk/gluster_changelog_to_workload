@@ -104,6 +104,9 @@ For help,
 
 ## TODO/Issues:
 
+- [ ] Exact time of each file operation is not available from
+  Changelogs. We need to use Changelog rollover time(Changelog file
+  suffix) as FOP Timestamp.
 - [ ] Script will not detect the files which are existed before
   enabling Changelog.(We can build the cache by crawling. NOT
   IMPLEMENTED)
