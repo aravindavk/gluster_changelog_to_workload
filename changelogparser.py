@@ -24,7 +24,6 @@ D c5250af6-720e-4bfe-b938-827614304f39
 
 """
 import sys
-import codecs
 
 ENTRY = 'E'
 META = 'M'
@@ -183,7 +182,7 @@ def parse(filename, callback=default_callback):
     data = None
     tokens = []
     changelog_ts = filename.rsplit(".")[-1]
-    with codecs.open(filename, mode="r+b", encoding="utf-8") as f:
+    with open(filename, "r+b") as f:
         # GlusterFS Changelog | version: v1.1 | encoding : 2
         header = f.readline()
         version = header.split()[4]
