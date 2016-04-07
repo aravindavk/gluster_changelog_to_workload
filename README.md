@@ -38,21 +38,46 @@ Cache will be stored in current directory where we run the script, if
 we run the script in different directory then cache will not be
 used.(This can be enhanced in future by saving in common path)
 
+## Crawl
+When Changelog not enabled from the beginning, this script will not
+pick up the changes happened to the files which existed before
+changelog enable. Use `--crawl` to initiate the crawl when running
+this script for a brick for first time. Note: This script invalidates
+the cache if any.
+
+	python gchangelogapi.py /exports/brick1/b1 -o output.txt --crawl
+
+## Filters
+#### not-modified-since <TS>
 By default script lists all the files in the Brick, to list only the
 files which are not modified after a given Timestamp,
 
     python gchangelogapi.py /exports/brick1/b1 -o output.txt \
         --not-modified-since 1459423298
 
-Or similar to find command, can use `--mmin`
+#### mmin MMIN File's data was last modified n minutes ago.
+
+	--mmin n  - Find files that are exactly n minutes old
+    --mmin -n - Find files that are less than n minutes old
+    --mmin +n - Find files that are more than n minutes old
+
+To list the files which are not modified in last two hours,
 
     python gchangelogapi.py /exports/brick1/b1 -o output.txt \
-        --mmin 120
+        --mmin +120
 
-Where,
+#### type
+List only files using,
 
-    --mmin MMIN File's data was last modified n minutes ago.
+    python gchangelogapi.py /exports/brick1/b1 -o output.txt \
+		--mmin +120 --type f
 
+List only directories using,
+
+    python gchangelogapi.py /exports/brick1/b1 -o output.txt \
+		--mmin +120 --type d
+
+## Debug
 Script can be run in debug mode by specifying `--debug`
 
     python gchangelogapi.py /exports/brick1/b1 -o output.txt \
@@ -95,7 +120,7 @@ Note: You can double confirm before deleting actual file,
 
     python gchangelogapi.py /exports/brick1/b1 \
         --output-prefix=/mnt/gv1/.gfid \
-        --mmin 60 | xargs -t -I {} find {} -mmin -60 | xargs rm
+        --mmin +60 | xargs -t -I {} find {} -mmin +60 | xargs rm
 
 For help,
 
@@ -107,9 +132,8 @@ For help,
 - [ ] Exact time of each file operation is not available from
   Changelogs. We need to use Changelog rollover time(Changelog file
   suffix) as FOP Timestamp.
-- [ ] Script will not detect the files which are existed before
-  enabling Changelog.(We can build the cache by crawling. NOT
-  IMPLEMENTED)
+- [X] Script will not detect the files which are existed before
+  enabling Changelog.(Added `--crawl` option)
 - [ ] If Changelog is disabled and enabled, script only considers
   latest HTIME file only for processing Changelogs.
 - [ ] More filters similar to `--not-modified-since`

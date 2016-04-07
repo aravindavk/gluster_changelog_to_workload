@@ -16,7 +16,9 @@ import sys
 import urllib
 import logging
 import time
+import uuid
 
+import xattr
 import changelogparser
 
 SEP = "\x00"
@@ -38,6 +40,55 @@ logger.setLevel(logging.INFO)
 
 class NoHtimeFiles(Exception):
     pass
+
+
+def find(path, callback_func=lambda x: True, ignore_dirs=[]):
+    if path in ignore_dirs:
+        return
+
+    st = os.lstat(path)
+    callback_func(path, st, is_file=False)
+
+    for p in os.listdir(path):
+        full_path = os.path.join(path, p)
+
+        if os.path.isdir(full_path):
+            find(full_path, callback_func, ignore_dirs)
+        else:
+            st = os.lstat(full_path)
+            callback_func(full_path, st)
+
+
+def get_gfid(path):
+    try:
+        return str(uuid.UUID(bytes=xattr.get(path, "trusted.gfid",
+                                             nofollow=True)))
+    except (IOError, OSError) as e:
+        logger.error("Unable to get GFID of {0}: {1}, skipping".format(
+            path, e))
+
+        return None
+
+
+def process_crawl_record(path, st, is_file=True):
+    # Extract GFID and PGFID from path and
+    # format GFID, PGFID/BN
+    pdir = os.path.dirname(path)
+    bn = os.path.basename(path)
+    gfid = get_gfid(path)
+    pgfid = get_gfid(pdir)
+    p = "{0}/{1}".format(pgfid, bn)
+    is_file = 1 if is_file else 0
+    if gfid is not None and pgfid is not None:
+        db_add_record(gfid, p, is_file, int(st.st_ctime), int(st.st_mtime))
+
+
+def brickfind_crawl(brick):
+    ignore_dirs = [os.path.join(brick, ".glusterfs"),
+                   os.path.join(brick, ".trashcan")]
+
+    find(brick, callback_func=process_crawl_record,
+         ignore_dirs=ignore_dirs)
 
 
 def symlink_gfid_to_path(brick, gfid):
@@ -79,6 +130,7 @@ def db_create_tables():
     query2 = """CREATE TABLE IF NOT EXISTS data(
     gfid VARCHAR(100),
     path VARCHAR(500),
+    is_file INTEGER,
     created_at INTEGER,
     modified_at INTEGER,
     UNIQUE(gfid, path) ON CONFLICT IGNORE
@@ -96,10 +148,13 @@ def db_get_last_processed():
     return cursor.fetchone()[0]
 
 
-def db_add_record(gfid, path, ts):
-    query = """INSERT INTO data(gfid, path, created_at, modified_at)
-    VALUES(?, ?, ?, ?)"""
-    cursor.execute(query, (gfid, path, ts, ts))
+def db_add_record(gfid, path, is_file, ts, mts=None):
+    if mts is None:
+        mts = ts
+
+    query = """INSERT INTO data(gfid, path, is_file, created_at, modified_at)
+    VALUES(?, ?, ?, ?, ?)"""
+    cursor.execute(query, (gfid, path, str(is_file), str(ts), str(mts)))
 
 
 def db_remove_record(gfid, path):
@@ -118,14 +173,46 @@ def db_rename_record(gfid, path1, path2, ts):
     cursor.execute(query, (path2, ts, gfid, path1))
 
 
-def db_get_paths_not_modified_after(ts):
-    if ts == 0:
-        # Get all the file paths
-        query = "SELECT path FROM data"
-        cursor.execute(query)
+def db_get_paths_not_modified_after(filters):
+    # Filter: mmin
+    # --mmin 2  - Find files that are exactly 2 minutes old
+    # --mmin -2 - Find files that are less than 2 minutes old
+    # --mmin +2 - Find files that are more than 2 minutes old
+    ty = filters.get("type", "")
+    if ty == "f":
+        type_filter = "WHERE is_file = 1"
+    elif ty == "d":
+        type_filter = "WHERE is_file = 0"
     else:
-        query = "SELECT path FROM data WHERE modified_at < ?"
+        type_filter = "WHERE 1 = 1"
+
+    not_modified_since = filters.get("not_modified_since", 0)
+    mmin = filters.get("mmin", None)
+
+    if not_modified_since > 0 or mmin is not None:
+        compare_char = "<"
+        ts = not_modified_since
+
+        if mmin is not None:
+            ts = mmin
+            if mmin.startswith("+"):
+                ts = mmin[1:]
+                compare_char = "<"
+            elif mmin.startswith("-"):
+                ts = mmin[1:]
+                compare_char = ">"
+            else:
+                compare_char = "="
+
+            ts = int(time.time()) - (int(ts) * 60)
+
+        query = "SELECT path FROM data {0} AND modified_at {1} ?".format(
+            type_filter, compare_char)
         cursor.execute(query, (ts, ))
+    else:
+        # Get all the file paths
+        query = "SELECT path FROM data {0}".format(type_filter)
+        cursor.execute(query)
 
 
 def db_update_last_processed(ts):
@@ -144,7 +231,8 @@ def get_latest_htime_file(brick_path):
 
 def process_changelog_record(record):
     if record.fop in ["CREATE", "MKDIR", "MKNOD", "LINK", "SYMLINK"]:
-        db_add_record(record.gfid, record.path, record.ts)
+        is_file = 0 if record.fop == "MKDIR" else 1
+        db_add_record(record.gfid, record.path, is_file, record.ts)
     elif record.fop == "RENAME":
         db_rename_record(record.gfid, record.path1, record.path2, record.ts)
     elif record.fop_type in ["D", "M"]:
@@ -212,7 +300,7 @@ def get_args():
     parser.add_argument("--not-modified-since", "-n", type=int,
                         help="Files not modified since",
                         default=int(time.time()))
-    parser.add_argument("--mmin", type=int,
+    parser.add_argument("--mmin",
                         help="File's data was last modified n minutes ago.")
     parser.add_argument("--no-cache", action="store_true",
                         help="Do not use cache")
@@ -222,13 +310,18 @@ def get_args():
                         help="Convert PGFID to Path")
     parser.add_argument("--cache-dir", default="",
                         help="Cache directory")
+    parser.add_argument("--type", help="Filter File/Directory",
+                        choices=["f", "d"])
+    parser.add_argument("--crawl", action="store_true",
+                        help="Crawl before Changelogs processing, Note: "
+                        "This option will clear the cache if any")
     parser.add_argument("--debug", help="Enable debug logging",
                         action="store_true")
     return parser.parse_args()
 
 
-def output(args, not_modified_since, file_obj=None):
-    db_get_paths_not_modified_after(not_modified_since)
+def output(args, filters, file_obj=None):
+    db_get_paths_not_modified_after(filters)
 
     for row in cursor:
         path = row[0]
@@ -255,14 +348,18 @@ def main():
     db_path = os.path.join(args.cache_dir,
                            "changelogdata_" + urllib.quote_plus(
                                args.brick_path) + ".db")
+
     db_init(db_path)
 
     # Delete Db if no cache is set
-    if args.no_cache:
+    if args.no_cache or args.crawl:
         db_tables_cleanup()
 
     # Initialize tables
     db_create_tables()
+
+    if args.crawl:
+        brickfind_crawl(args.brick_path)
 
     try:
         htime_file = get_latest_htime_file(args.brick_path)
@@ -270,21 +367,25 @@ def main():
         sys.stderr.write("{0}\n".format(err))
         sys.exit(1)
 
-    not_modified_since = 0
+    filters = {"not_modified_since": 0}
     if args.mmin is not None:
-        not_modified_since = int(time.time()) - (args.mmin * 60)
-    elif args.not_modified_since is not None:
-        not_modified_since = args.not_modified_since
+        filters["mmin"] = args.mmin
 
-    logger.info("Not modified Since: {0}".format(not_modified_since))
+    elif args.not_modified_since is not None:
+        filters["not_modified_since"] = args.not_modified_since
+
+    if args.type is not None:
+        filters["type"] = args.type
+
+    logger.info("Search filters: {0}".format(repr(filters)))
 
     process_htime_file(args.brick_path, htime_file)
 
     if args.output_file:
         with open(args.output_file, "w") as f:
-            output(args, not_modified_since, f)
+            output(args, filters, f)
     else:
-        output(args, not_modified_since)
+        output(args, filters)
 
 
 if __name__ == "__main__":
