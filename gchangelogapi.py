@@ -215,6 +215,12 @@ def db_get_paths_not_modified_after(filters):
         cursor.execute(query)
 
 
+def db_get_paths_from_gfids(gfids):
+    query = "SELECT path, gfid FROM data WHERE gfid IN ({0})".format(
+        ",".join("?" * len(gfids)))
+    cursor.execute(query, gfids)
+
+
 def db_update_last_processed(ts):
     query = "UPDATE last_processed SET ts = ?"
     cursor.execute(query, (ts, ))
@@ -312,6 +318,8 @@ def get_args():
                         help="Cache directory")
     parser.add_argument("--type", help="Filter File/Directory",
                         choices=["f", "d"])
+    parser.add_argument("-g", "--gfid-to-path", help="GFID to convert to Path",
+                        action="append")
     parser.add_argument("--crawl", action="store_true",
                         help="Crawl before Changelogs processing, Note: "
                         "This option will clear the cache if any")
@@ -321,7 +329,12 @@ def get_args():
 
 
 def output(args, filters, file_obj=None):
-    db_get_paths_not_modified_after(filters)
+    gfids = filters.get("gfids", [])
+
+    if gfids:
+        db_get_paths_from_gfids(gfids)
+    else:
+        db_get_paths_not_modified_after(filters)
 
     for row in cursor:
         path = row[0]
@@ -333,10 +346,14 @@ def output(args, filters, file_obj=None):
         if args.output_prefix:
             path = os.path.join(args.output_prefix, path)
 
+        op = "{0}\n".format(path)
+        if gfids:
+            op = "{0} {1}\n".format(row[1], path)
+
         if file_obj is not None:
-            file_obj.write("{0}\n".format(path))
+            file_obj.write(op)
         else:
-            print (path)
+            sys.stdout.write(op)
 
 
 def main():
@@ -367,7 +384,7 @@ def main():
         sys.stderr.write("{0}\n".format(err))
         sys.exit(1)
 
-    filters = {"not_modified_since": 0}
+    filters = {"not_modified_since": 0, "gfids": []}
     if args.mmin is not None:
         filters["mmin"] = args.mmin
 
@@ -376,6 +393,9 @@ def main():
 
     if args.type is not None:
         filters["type"] = args.type
+
+    if args.gfid_to_path:
+        filters["gfids"] = args.gfid_to_path
 
     logger.info("Search filters: {0}".format(repr(filters)))
 

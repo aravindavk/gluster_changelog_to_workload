@@ -83,10 +83,29 @@ Script can be run in debug mode by specifying `--debug`
     python gchangelogapi.py /exports/brick1/b1 -o output.txt \
         --not-modified-since 1459423298 --debug
 
+## Output Prefix
+Since script works in the brick backend, but we need to operate on the
+output in Gluster mount. We can prefix every line of output path with
+required prefix using `--output-prefix` option.
+
 Script by default will not convert PGFID into Path since it involves
 readlink. Files can still be accessed using `aux-gfid-mount`.
 
-Example output,
+Mount the volume using,
+
+	mount -t glusterfs -o aux-gfid-mount localhost:gv1 /mnt/gv1
+
+Now we can access the files in this mount with parent GFID and
+basename even though full path is not known.
+
+	cat /mnt/gv1/.gfid/e09e523d-97d3-4c00-968d-db747c3fda9c/f1
+
+Where `00000000-0000-0000-0000-000000000001` is GFID of root directory.
+
+If we give output prefix as `$MOUNT_PATH/.gfid`, script will add this
+prefix while printing the output.
+
+Example output(without `--output-prefix`),
 
     00000000-0000-0000-0000-000000000001/f1
     00000000-0000-0000-0000-000000000001/f2
@@ -97,15 +116,26 @@ Output can be prefixed by giving `--output-prefix`,
         --not-modified-since 1459423298 --debug \
         --output-prefix=/mnt/gv1/.gfid
 
-Example output,
+Example output(with `--output-prefix`),
 
     /mnt/gv1/.gfid/00000000-0000-0000-0000-000000000001/f1
     /mnt/gv1/.gfid/00000000-0000-0000-0000-000000000001/f2
 
-If we need to convert PGFID to path, specify `--pgfid-to-path`
+## Parent GFID to Path
+If we don't use aux mount, then we need full path of the file to
+access it. Convert PGFID to path by specifying `--pgfid-to-path`
+
+Mount without aux-gfid-mount option,
+
+	mount -t glusterfs localhost:gv1 /mnt/gv1
+
+Run with `--pgfid-to-path` and `--output-prefix`
 
     python gchangelogapi.py /exports/brick1/b1 -o output.txt \
-        --not-modified-since 1459423298 --debug --pgfid-to-path
+		--not-modified-since 1459423298 --debug --pgfid-to-path \
+		--output-prefix=/mnt/gv1
+
+**Note:** .gfid is not required in `--output-prefix`
 
 ## Usecase - Deleting Old files
 The script output can be piped to another command, which can be used
@@ -114,13 +144,30 @@ modified in last one hour.
 
     python gchangelogapi.py /exports/brick1/b1 \
         --output-prefix=/mnt/gv1/.gfid \
-        --mmin 120 | xargs rm
+        --mmin +60 | xargs rm
 
-Note: You can double confirm before deleting actual file,
+**Note:** You can double confirm before deleting actual file,
 
     python gchangelogapi.py /exports/brick1/b1 \
         --output-prefix=/mnt/gv1/.gfid \
         --mmin +60 | xargs -t -I {} find {} -mmin +60 | xargs rm
+
+## GFID to Path Conversion
+Since Cache is available, it is easy to convert GFID to path. Pass
+GFID to the script using `gfid-to-path` or `-g` option.
+
+    python gchangelogapi.py /exports/brick1/b1 \
+		--output-prefix=/mnt/gv1/ \
+		--pgfid-to-path \
+		-g ebdb3062-f935-460e-a02a-8b84e3dbe300
+
+**Note:** Multiple GFIDs can be provided at once
+
+    python gchangelogapi.py /exports/brick1/b1 \
+		--output-prefix=/mnt/gv1/ \
+		--pgfid-to-path \
+		-g ebdb3062-f935-460e-a02a-8b84e3dbe300 \
+		-g 77e78a8e-3641-404e-9852-8a3fa4d15f7b
 
 For help,
 
