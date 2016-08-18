@@ -65,7 +65,7 @@ def process_changelog_record(record):
         except IOError as e:
             # Create a dummy parent dir if not exists already
             if e.errno == ENOENT:
-                bname_dir = "d%s" % dir_num
+                bname_dir = "%s_%s" % (changelog_file.lower(), dir_num)
                 dir_num += 1
                 blob_dir = entry_pack_dir(pgfid, bname_dir, 16893,
                                           0, 0)
@@ -81,7 +81,18 @@ def process_changelog_record(record):
         blob = entry_pack_dir(record.gfid, bname, record.mode,
                               record.uid, record.gid)
         pgfid_path = os.path.join(ROOTDIR, ".gfid", pgfid)
-        xattr.set(pgfid_path, 'glusterfs.gfid.newfile', blob)
+        try:
+            xattr.set(pgfid_path, 'glusterfs.gfid.newfile', blob)
+        except IOError as e:
+            # Create a dummy parent dir if not exists already
+            if e.errno == ENOENT:
+                bname_dir = "%s_%s" % (changelog_file.lower(), dir_num)
+                dir_num += 1
+                blob_dir = entry_pack_dir(pgfid, bname_dir, 16893,
+                                          0, 0)
+                pgfid_path_dir = os.path.join(ROOTDIR, ".gfid", ROOT_GFID)
+                xattr.set(pgfid_path_dir, 'glusterfs.gfid.newfile', blob_dir)
+                xattr.set(pgfid_path, 'glusterfs.gfid.newfile', blob)
     elif record.fop == "RENAME":
         path1 = os.path.join(ROOTDIR, ".gfid", record.path1)
         path2 = os.path.join(ROOTDIR, ".gfid", record.path2)
@@ -104,6 +115,6 @@ if __name__ == "__main__":
     ROOTDIR = sys.argv[1]
     changelog_file = sys.argv[2]
     SAMPLE_DATA = ""
-    with open("sample_4mb.txt") as f:
+    with open("sample.txt") as f:
         SAMPLE_DATA = f.read()
     changelogparser.parse(changelog_file, callback=process_changelog_record)
