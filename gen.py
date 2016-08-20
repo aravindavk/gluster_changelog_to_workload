@@ -72,10 +72,6 @@ def process_changelog_record(record):
                 pgfid_path_dir = os.path.join(ROOTDIR, ".gfid", ROOT_GFID)
                 xattr.set(pgfid_path_dir, 'glusterfs.gfid.newfile', blob_dir)
                 xattr.set(pgfid_path, 'glusterfs.gfid.newfile', blob)
-
-            # Populate file with 4mb data
-            with open(os.path.join(ROOTDIR, ".gfid", record.gfid), "w") as f:
-                            f.write(SAMPLE_DATA)
     elif record.fop == "MKDIR":
         pgfid, bname = record.path.split("/")
         blob = entry_pack_dir(record.gfid, bname, record.mode,
@@ -110,6 +106,21 @@ def process_changelog_record(record):
             if not e.errno == ENOENT:
                 raise
 
+    elif record.fop_type == "D":
+        # Populate file with 4mb data
+        try:
+            with open(os.path.join(ROOTDIR, ".gfid", record.gfid), "w") as f:
+                f.write(SAMPLE_DATA)
+        except OSError as e:
+            if not e.errno == ENOENT:
+                raise
+    elif record.fop_type == "M":
+        # Touch the file
+        try:
+            os.utime(os.path.join(ROOTDIR, ".gfid", record.gfid), None)
+        except OSError as e:
+            if not e.errno == ENOENT:
+                raise
 
 if __name__ == "__main__":
     ROOTDIR = sys.argv[1]
