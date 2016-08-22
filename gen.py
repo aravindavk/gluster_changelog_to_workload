@@ -111,16 +111,14 @@ def process_changelog_record(record):
         try:
             with open(os.path.join(ROOTDIR, ".gfid", record.gfid), "w") as f:
                 f.write(SAMPLE_DATA)
-        except OSError as e:
-            if not e.errno == ENOENT:
-                raise
+        except OSError:
+            pass
     elif record.fop_type == "M":
         # Touch the file
         try:
             os.utime(os.path.join(ROOTDIR, ".gfid", record.gfid), None)
-        except OSError as e:
-            if not e.errno == ENOENT:
-                raise
+        except OSError:
+            pass
 
 if __name__ == "__main__":
     ROOTDIR = sys.argv[1]
